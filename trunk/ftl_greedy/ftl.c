@@ -27,6 +27,9 @@
 
 #include "jasmine.h"
 
+#define PERCENT_TO_GC 10
+#define TRY_ALTERNATE false
+
 //----------------------------------
 // macro
 //----------------------------------
@@ -82,6 +85,7 @@ UINT32 				  g_ftl_write_buf_id;
 // macro functions
 //----------------------------------
 #define is_full_all_blks(bank)  (g_misc_meta[bank].free_blk_cnt == 1)
+#define near_full_all_blks(bank) (g_misc_meta[bank].free_blk_cnt * 100 >= PERCENT_TO_GC * VBLKS_PER_BANK)
 #define inc_full_blk_cnt(bank)  (g_misc_meta[bank].free_blk_cnt--)
 #define dec_full_blk_cnt(bank)  (g_misc_meta[bank].free_blk_cnt++)
 #define inc_mapblk_vpn(bank, mapblk_lbn)    (g_misc_meta[bank].cur_mapblk_vpn[mapblk_lbn]++)
@@ -134,6 +138,7 @@ static void sanity_check(void)
     if ((dram_requirement > DRAM_SIZE) || // DRAM metadata size check
         (sizeof(misc_metadata) > BYTES_PER_PAGE)) // misc metadata size check
     {
+        // We failed the sanity check, so blink the led and go into an infinite loop.
         led_blink();
         while (1);
     }
@@ -576,7 +581,11 @@ static UINT32 assign_new_write_vpn(UINT32 const bank)
         inc_full_blk_cnt(bank);
 
         // do garbage collection if necessary
-        if (is_full_all_blks(bank))
+        if (is_full_all_blks(bank)
+#if TRY_ALTERNATE
+          || near_full_all_blks(bank)
+#endif
+        )
         {
             garbage_collection(bank);
             return get_cur_write_vpn(bank);
